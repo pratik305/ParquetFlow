@@ -23,6 +23,7 @@ def clean(df: pd.DataFrame, date_col: str) -> tuple[pd.DataFrame, dict]:
     keep = parsed.notna()
     stats["dropped_null_date"] = int((~keep).sum())
     df = df[keep].copy()
+    df[date_col] = parsed[keep]
     df["date"] = parsed[keep].dt.strftime("%Y-%m-%d")
 
     before = len(df)
@@ -61,6 +62,11 @@ def lambda_handler(event, context):
             dataset=True,
             partition_cols=["date"],
             mode="overwrite_partitions",
+            # Athena reads millisecond timestamps, not the pandas default of nanoseconds
+            pyarrow_additional_kwargs={
+                "coerce_timestamps": "ms",
+                "allow_truncated_timestamps": True,
+            },
         )
         processed += 1
 

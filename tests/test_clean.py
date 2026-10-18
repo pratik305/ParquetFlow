@@ -16,6 +16,12 @@ def test_adds_date_partition_column():
     assert out["date"].tolist() == ["2024-03-05"]
 
 
+def test_casts_date_column_to_datetime():
+    df = pd.DataFrame({"ts": ["2024-03-05 14:22:00"], "v": [1]})
+    out, _ = clean(df, "ts")
+    assert pd.api.types.is_datetime64_any_dtype(out["ts"])
+
+
 def test_drops_null_and_unparseable_dates():
     df = pd.DataFrame({"ts": ["2024-03-05", None, "garbage"], "v": [1, 2, 3]})
     out, stats = clean(df, "ts")
