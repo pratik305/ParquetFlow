@@ -1,0 +1,17 @@
+{
+  "LambdaFunctionConfigurations": [
+    {
+      "Id": "csv-to-parquet",
+      "LambdaFunctionArn": "FUNCTION_ARN",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            { "Name": "prefix", "Value": "raw/" },
+            { "Name": "suffix", "Value": ".csv" }
+          ]
+        }
+      }
+    }
+  ]
+}

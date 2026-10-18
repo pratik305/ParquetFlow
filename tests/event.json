@@ -1,0 +1,12 @@
+{
+  "Records": [
+    {
+      "eventSource": "aws:s3",
+      "eventName": "ObjectCreated:Put",
+      "s3": {
+        "bucket": { "name": "REPLACE_ME" },
+        "object": { "key": "raw/sample.csv" }
+      }
+    }
+  ]
+}
