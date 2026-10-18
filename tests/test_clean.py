@@ -16,10 +16,23 @@ def test_adds_date_partition_column():
     assert out["date"].tolist() == ["2024-03-05"]
 
 
-def test_casts_date_column_to_datetime():
+def test_casts_date_column_to_millisecond_datetime():
     df = pd.DataFrame({"ts": ["2024-03-05 14:22:00"], "v": [1]})
     out, _ = clean(df, "ts")
-    assert pd.api.types.is_datetime64_any_dtype(out["ts"])
+    assert str(out["ts"].dtype) == "datetime64[ms]"
+
+
+def test_casts_other_datetime_columns_without_dropping_rows():
+    df = pd.DataFrame(
+        {
+            "pickup_datetime": ["2024-03-05 14:22:00", "2024-03-05 15:00:00"],
+            "dropoff_datetime": ["2024-03-05 14:40:00", "garbage"],
+        }
+    )
+    out, _ = clean(df, "pickup_datetime")
+    assert len(out) == 2
+    assert str(out["dropoff_datetime"].dtype) == "datetime64[ms]"
+    assert out["dropoff_datetime"].isna().tolist() == [False, True]
 
 
 def test_drops_null_and_unparseable_dates():
