@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: ParquetFlow - CSV to partitioned Parquet pipeline (S3, Lambda, Glue, Athena)
+
+# Everything here is prefixed parquetflow-sam so it can run next to the hand-built (CLI) version.
+
+Parameters:
+  DateColumn:
+    Type: String
+    Default: tpep_pickup_datetime
+    Description: CSV column holding the event date (after name normalisation)
+
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub parquetflow-sam-${AWS::AccountId}-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  CsvToParquetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: parquetflow-sam-csv-to-parquet
+      CodeUri: src/
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      MemorySize: 1024
+      Timeout: 120
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python312:31
+      Environment:
+        Variables:
+          DATE_COLUMN: !Ref DateColumn
+      # Least privilege: read raw/, write curated/, nothing else.
+      # The bucket name is built with !Sub, not !Ref, to avoid a circular dependency
+      # between the bucket's notification and this function's role.
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub arn:aws:s3:::parquetflow-sam-${AWS::AccountId}-${AWS::Region}/raw/*
+            - Effect: Allow
+              Action: [s3:PutObject, s3:DeleteObject]
+              Resource: !Sub arn:aws:s3:::parquetflow-sam-${AWS::AccountId}-${AWS::Region}/curated/*
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !Sub arn:aws:s3:::parquetflow-sam-${AWS::AccountId}-${AWS::Region}
+              Condition:
+                StringLike:
+                  s3:prefix: ["raw/*", "curated/*"]
+      Events:
+        RawCsvUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref DataBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: raw/
+                  - Name: suffix
+                    Value: .csv
+
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: parquetflow_sam_db
+
+  GlueCrawlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Policies:
+        - PolicyName: read-curated
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:aws:s3:::parquetflow-sam-${AWS::AccountId}-${AWS::Region}/curated/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:aws:s3:::parquetflow-sam-${AWS::AccountId}-${AWS::Region}
+                Condition:
+                  StringLike:
+                    s3:prefix: ["curated/*", "curated"]
+
+  GlueCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: parquetflow-sam-crawler
+      Role: !GetAtt GlueCrawlerRole.Arn
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub s3://${DataBucket}/curated/
+
+  AthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: parquetflow-sam
+      RecursiveDeleteOption: true
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        ResultConfiguration:
+          OutputLocation: !Sub s3://${DataBucket}/athena-results/
+
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: parquetflow-sam-lambda-errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CsvToParquetFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  BucketName:
+    Value: !Ref DataBucket
+  FunctionName:
+    Value: !Ref CsvToParquetFunction
+  CrawlerName:
+    Value: !Ref GlueCrawler
+  Database:
+    Value: !Ref GlueDatabase
+  WorkGroup:
+    Value: !Ref AthenaWorkGroup

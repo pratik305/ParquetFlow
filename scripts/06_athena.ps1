@@ -1,14 +1,18 @@
 # Dot-source: . .\scripts\06_athena.ps1
 # Usage: Invoke-Athena (Get-Content sql\parquet_hourly.sql -Raw)
 function Invoke-Athena {
-    param([Parameter(Mandatory)][string]$Sql)
+    param(
+        [Parameter(Mandatory)][string]$Sql,
+        [string]$WorkGroup = 'parquetflow',
+        [string]$Database = 'parquetflow_db'
+    )
 
     # Windows PowerShell 5.1 strips double quotes from native args, so escape them
     $flat = ($Sql -replace '\s+', ' ').Trim().Replace('"', '\"')
 
     $qid = aws athena start-query-execution `
-        --work-group parquetflow `
-        --query-execution-context Database=parquetflow_db `
+        --work-group $WorkGroup `
+        --query-execution-context Database=$Database `
         --query-string $flat `
         --query QueryExecutionId --output text
 
