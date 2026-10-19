@@ -1,6 +1,8 @@
 # ParquetFlow
 
-A small serverless data pipeline on AWS: upload a CSV, and it is cleaned and converted to partitioned Parquet, then queryable in Athena. I built every resource with the AWS CLI to learn how each piece fits together.
+A small serverless data pipeline on AWS: upload a CSV, and it is cleaned and converted to partitioned Parquet, then queryable in Athena. I built every resource with the AWS CLI to learn how each piece fits together, then rebuilt the same pipeline as a SAM template.
+
+> The AWS resources have been deleted to avoid ongoing cost. The results below were captured while it was running. To run it again, deploy [template.yaml](template.yaml) with SAM (see [Deploy with SAM](#deploy-with-sam-infrastructure-as-code)).
 
 ```mermaid
 flowchart LR
