@@ -35,7 +35,7 @@ function Remove-CliStack {
     # The crawler must be idle (READY) to be deleted, and goes before its database
     Step 'Delete Glue crawler' { aws glue delete-crawler --name parquetflow-crawler }
     Step 'Delete Glue database (and its tables)' { aws glue delete-database --name parquetflow_db }
-    Step 'Delete Athena workgroup' { aws athena delete-work-group --work-group parquetflow --recursive-delete-work-group }
+    Step 'Delete Athena workgroup' { aws athena delete-work-group --work-group parquetflow --recursive-delete-option }
     Step 'Delete alarm' { aws cloudwatch delete-alarms --alarm-names parquetflow-lambda-errors }
 
     # A role can only be deleted once every policy is removed from it
