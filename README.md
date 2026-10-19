@@ -52,6 +52,24 @@ The CSV is 43.7 MB and the Parquet output is about 8 MB. More in [docs/scan-comp
 
 Scripts are in [scripts/](scripts/), policies in [infra/](infra/), queries in [sql/](sql/).
 
+## Deploy with SAM (infrastructure as code)
+
+[template.yaml](template.yaml) describes the whole pipeline: bucket, Lambda and its trigger, Glue database and crawler, Athena workgroup and the error alarm. It uses `parquetflow-sam-*` names, so it can run next to the hand-built version.
+
+```powershell
+sam build
+sam deploy --stack-name parquetflow-sam --region us-east-1 --capabilities CAPABILITY_IAM --resolve-s3
+```
+
+Verified end to end: uploading the sample CSV produced the same six partitions, the same query result, and exactly the same bytes scanned (667,977) as the CLI-built stack.
+
+What SAM does for you compared with the CLI steps:
+- The `Events:` block on the function creates both the Lambda invoke permission and the bucket notification, two separate calls when done by hand.
+- CloudFormation works out the creation order, so the bucket, role, function and trigger need no manual sequencing.
+- One difference: SAM attaches the managed `AWSLambdaBasicExecutionRole` to the function role, which is broader for logging than the hand-written policy scoped to `parquetflow-*` log groups.
+
+To try the Lambda with a local event, copy `tests/event.json` to `tests/event.local.json` (git-ignored) and replace `REPLACE_ME` with your bucket name.
+
 ## Security
 
 - The Lambda role reads only `raw/*` and writes only `curated/*`. `simulate-principal-policy` confirms `PutObject` is `implicitDeny` on `raw/` and `allowed` on `curated/`.
@@ -73,4 +91,11 @@ A few cents at most with this dataset. Crawler runs are billed per minute, and A
 
 ## Cleanup
 
-Delete the S3 objects and bucket, the Lambda, the Glue crawler and database, the Athena workgroup, the alarm and both IAM roles. The order matters, because the roles must be emptied before they are deleted.
+For the SAM stack, empty the bucket first because CloudFormation cannot delete a non-empty bucket, then delete the stack:
+
+```powershell
+aws s3 rm s3://parquetflow-sam-<account>-<region> --recursive
+sam delete --stack-name parquetflow-sam
+```
+
+For the CLI-built version, delete the S3 objects and bucket, the Lambda, the Glue crawler and database, the Athena workgroup, the alarm and both IAM roles. Remove each role's policies before deleting the role.
